@@ -1,2 +1,31 @@
-# simtlab-gpu-simulator
-A cycle-approximate SIMT GPU simulator in C++20 with a custom mini-ISA, warp divergence and reconvergence, memory coalescing and shared memory bank conflict modeling, an occupancy-aware warp scheduler, and performance counters. Benchmarked on naive vs optimized kernels and validated against CUDA runs on a T4.
+# SimtLab
+
+SimtLab is an educational, CPU-based SIMT GPU simulator written in modern C++20.
+
+## Status
+
+Phase 0.2: repository skeleton and CI.
+
+## Prerequisites
+
+- CMake 3.20 or newer
+- A C++20-compatible compiler
+
+## Build
+
+```sh
+cmake -S . -B build
+cmake --build build
+```
+
+## Test
+
+```sh
+ctest --test-dir build --output-on-failure
+```
+
+## Run
+
+```sh
+./build/simtlab
+```
