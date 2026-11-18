@@ -21,7 +21,7 @@ compile_commands.json
 # Executables
 *.exe
 *.out
-simtlab
+/simtlab
 
 # IDE and editor files
 .vscode/
