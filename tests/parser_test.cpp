@@ -20,5 +20,20 @@ int main()
         || !exits.instructions[0].operands.empty() || exits.instructions[1].opcode != simtlab::Opcode::EXIT) return 1;
     if (!rejects("NOPE", "1:1") || !rejects("EXIT r0", "1:6") || !rejects("@EXIT", "1:1")
         || !rejects("\n  nope", "2:3")) return 1;
+    const auto labels = simtlab::parse("first:\nsecond:\nEXIT\nend:");
+    if (labels.instructions.size() != 1 || labels.instructions[0].opcode != simtlab::Opcode::EXIT
+        || labels.labels.size() != 3 || labels.labels.at("first") != 0
+        || labels.labels.at("second") != 0 || labels.labels.at("end") != 1) return 1;
+    const auto case_sensitive = simtlab::parse("Name:\nname:");
+    if (case_sensitive.labels.size() != 2 || case_sensitive.labels.at("Name") != 0
+        || case_sensitive.labels.at("name") != 0) return 1;
+    if (!rejects("same:\nEXIT\nsame:", "3:1") || !rejects("label: EXIT", "1:8")) return 1;
+    bool duplicate_reported = false;
+    try { simtlab::parse("dup:\nEXIT\ndup:"); }
+    catch (const std::runtime_error& error)
+    {
+        duplicate_reported = std::string(error.what()).find("duplicate label at 3:1") != std::string::npos;
+    }
+    if (!duplicate_reported) return 1;
     return 0;
 }

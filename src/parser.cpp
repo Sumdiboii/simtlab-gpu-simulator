@@ -39,6 +39,19 @@ Program parse(std::string_view source)
         }
         const Token& mnemonic = tokens[position++];
         if (mnemonic.kind != TokenKind::Identifier) fail(mnemonic, "malformed instruction");
+        if (tokens[position].kind == TokenKind::Colon)
+        {
+            if (program.labels.contains(mnemonic.lexeme)) fail(mnemonic, "duplicate label");
+            if (tokens[position + 1].kind != TokenKind::EndOfLine
+                && tokens[position + 1].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position + 1], "expected end of label line");
+            }
+            program.labels.emplace(mnemonic.lexeme, program.instructions.size());
+            ++position;
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
         if (!isExit(mnemonic.lexeme)) fail(mnemonic, "unknown mnemonic");
         if (tokens[position].kind != TokenKind::EndOfLine
             && tokens[position].kind != TokenKind::EndOfFile)
