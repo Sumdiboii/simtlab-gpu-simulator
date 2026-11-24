@@ -39,3 +39,11 @@ target_include_directories(simtlab_token_test PRIVATE ${PROJECT_SOURCE_DIR}/incl
 set_target_properties(simtlab_token_test PROPERTIES CXX_EXTENSIONS OFF)
 
 add_test(NAME simtlab_token_test COMMAND simtlab_token_test)
+
+add_executable(simtlab_lexer_test lexer_test.cpp ${PROJECT_SOURCE_DIR}/src/lexer.cpp)
+
+target_compile_features(simtlab_lexer_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_lexer_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_lexer_test PROPERTIES CXX_EXTENSIONS OFF)
+
+add_test(NAME simtlab_lexer_test COMMAND simtlab_lexer_test)

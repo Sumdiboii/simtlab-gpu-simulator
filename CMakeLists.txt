@@ -8,7 +8,9 @@ option(BUILD_TESTING "Build and register tests" ON)
 
 add_executable(simtlab
     src/main.cpp
+    src/lexer.cpp
 )
+target_include_directories(simtlab PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
 target_compile_features(simtlab PRIVATE cxx_std_20)
 set_target_properties(simtlab PROPERTIES
