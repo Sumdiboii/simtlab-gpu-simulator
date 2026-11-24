@@ -31,3 +31,11 @@ target_include_directories(simtlab_instruction_model_test PRIVATE ${PROJECT_SOUR
 set_target_properties(simtlab_instruction_model_test PROPERTIES CXX_EXTENSIONS OFF)
 
 add_test(NAME simtlab_instruction_model_test COMMAND simtlab_instruction_model_test)
+
+add_executable(simtlab_token_test token_test.cpp)
+
+target_compile_features(simtlab_token_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_token_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_token_test PROPERTIES CXX_EXTENSIONS OFF)
+
+add_test(NAME simtlab_token_test COMMAND simtlab_token_test)
