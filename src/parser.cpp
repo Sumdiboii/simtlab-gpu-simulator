@@ -75,8 +75,9 @@ Program parse(std::string_view source)
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "SYNC");
         const bool isAdd = matchesMnemonic(mnemonic.lexeme, "ADD");
+        const bool isSub = matchesMnemonic(mnemonic.lexeme, "SUB");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub) fail(mnemonic, "unknown mnemonic");
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -139,6 +140,33 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after ADD");
             }
             program.instructions.push_back({Opcode::ADD, {destination, source1, source2}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isSub)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SUB");
+            ++position;
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SUB");
+            ++position;
+            const GprIndex source2 = registerOperand();
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after SUB");
+            }
+            program.instructions.push_back({Opcode::SUB, {destination, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }

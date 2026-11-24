@@ -73,5 +73,24 @@ int main()
         || !rejects("ADD ,r0,r1", "1:5") || !rejects("ADD r0,,r1", "1:8")
         || !rejects("ADD rx, r1, r2", "1:5") || !rejects("ADD r32, r1, r2", "1:5")
         || !rejects("ADD r0, r1, 2", "1:13")) return 1;
+    const auto subs = simtlab::parse("SUB r0, r31, R0\nsUb R31, r0, r31");
+    if (subs.instructions.size() != 2) return 1;
+    for (const auto& instruction : subs.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::SUB || instruction.operands.size() != 3) return 1;
+        for (const auto& operand : instruction.operands)
+            if (!std::holds_alternative<simtlab::GprIndex>(operand)) return 1;
+    }
+    if (std::get<simtlab::GprIndex>(subs.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(subs.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(subs.instructions[0].operands[2]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(subs.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(subs.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(subs.instructions[1].operands[2]) != simtlab::GprIndex::R31) return 1;
+    if (!rejects("SUB", "1:4") || !rejects("SUB r0, r1,", "1:12")
+        || !rejects("SUB r0, r1, r2, r3", "1:15") || !rejects("SUB r0 r1, r2", "1:8")
+        || !rejects("SUB ,r0,r1", "1:5") || !rejects("SUB r0,,r1", "1:8")
+        || !rejects("SUB rx, r1, r2", "1:5") || !rejects("SUB r32, r1, r2", "1:5")
+        || !rejects("SUB r0, r1, 2", "1:13")) return 1;
     return 0;
 }
