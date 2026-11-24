@@ -1,4 +1,5 @@
 #include <simtlab/isa/parser.hpp>
+#include <simtlab/isa/register.hpp>
 
 #include <cstdint>
 #include <stdexcept>
@@ -53,5 +54,24 @@ int main()
         || !rejects("BAR.SYNC 0x10", "1:10") || !rejects("BAR.SYNC -1", "1:10")
         || !rejects("BAR.SYNC 1.5", "1:10") || !rejects("BAR.SYNC 1 2", "1:12")
         || !rejects("BAR.SYNC +", "1:11")) return 1;
+    const auto adds = simtlab::parse("add r0, R31, r1\nAdD r31, r0, r31");
+    if (adds.instructions.size() != 2) return 1;
+    for (const auto& instruction : adds.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::ADD || instruction.operands.size() != 3) return 1;
+        for (const auto& operand : instruction.operands)
+            if (!std::holds_alternative<simtlab::GprIndex>(operand)) return 1;
+    }
+    if (std::get<simtlab::GprIndex>(adds.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(adds.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(adds.instructions[0].operands[2]) != simtlab::GprIndex::R1
+        || std::get<simtlab::GprIndex>(adds.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(adds.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(adds.instructions[1].operands[2]) != simtlab::GprIndex::R31) return 1;
+    if (!rejects("ADD", "1:4") || !rejects("ADD r0, r1,", "1:12")
+        || !rejects("ADD r0, r1, r2, r3", "1:15") || !rejects("ADD r0 r1, r2", "1:8")
+        || !rejects("ADD ,r0,r1", "1:5") || !rejects("ADD r0,,r1", "1:8")
+        || !rejects("ADD rx, r1, r2", "1:5") || !rejects("ADD r32, r1, r2", "1:5")
+        || !rejects("ADD r0, r1, 2", "1:13")) return 1;
     return 0;
 }

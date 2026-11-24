@@ -1,5 +1,6 @@
 #include <simtlab/isa/lexer.hpp>
 #include <simtlab/isa/parser.hpp>
+#include <simtlab/isa/register.hpp>
 
 #include <cstdint>
 #include <stdexcept>
@@ -17,6 +18,21 @@ bool matchesMnemonic(std::string_view name, std::string_view expected)
         const char upper = name[i] >= 'a' && name[i] <= 'z' ? name[i] - 'a' + 'A' : name[i];
         if (upper != expected[i]) return false;
     }
+    return true;
+}
+
+bool parseGpr(std::string_view name, GprIndex& index)
+{
+    if (name.size() < 2 || (name[0] != 'r' && name[0] != 'R')
+        || (name.size() > 2 && name[1] == '0')) return false;
+    unsigned int value = 0;
+    for (std::size_t i = 1; i < name.size(); ++i)
+    {
+        if (name[i] < '0' || name[i] > '9') return false;
+        value = value * 10 + static_cast<unsigned int>(name[i] - '0');
+        if (value > MAX_GPR_INDEX) return false;
+    }
+    index = static_cast<GprIndex>(value);
     return true;
 }
 }
@@ -58,8 +74,9 @@ Program parse(std::string_view source)
             && position + 1 < tokens.size()
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "SYNC");
+        const bool isAdd = matchesMnemonic(mnemonic.lexeme, "ADD");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT")) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd) fail(mnemonic, "unknown mnemonic");
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -95,6 +112,33 @@ Program parse(std::string_view source)
             }
             if (negative && value != 0) fail(*sign, "BAR.SYNC ID must be 0 through 15");
             program.instructions.push_back({Opcode::BAR_SYNC, {std::uint32_t{value}}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isAdd)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in ADD");
+            ++position;
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in ADD");
+            ++position;
+            const GprIndex source2 = registerOperand();
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after ADD");
+            }
+            program.instructions.push_back({Opcode::ADD, {destination, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
