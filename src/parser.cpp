@@ -77,8 +77,9 @@ Program parse(std::string_view source)
         const bool isAdd = matchesMnemonic(mnemonic.lexeme, "ADD");
         const bool isSub = matchesMnemonic(mnemonic.lexeme, "SUB");
         const bool isMul = matchesMnemonic(mnemonic.lexeme, "MUL");
+        const bool isFma = matchesMnemonic(mnemonic.lexeme, "FMA");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma) fail(mnemonic, "unknown mnemonic");
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -195,6 +196,36 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after MUL");
             }
             program.instructions.push_back({Opcode::MUL, {destination, source1, source2}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isFma)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in FMA");
+            ++position;
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in FMA");
+            ++position;
+            const GprIndex source2 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in FMA");
+            ++position;
+            const GprIndex source3 = registerOperand();
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after FMA");
+            }
+            program.instructions.push_back({Opcode::FMA, {destination, source1, source2, source3}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
