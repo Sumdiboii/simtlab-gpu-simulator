@@ -23,3 +23,11 @@ target_include_directories(simtlab_operand_test PRIVATE ${PROJECT_SOURCE_DIR}/in
 set_target_properties(simtlab_operand_test PROPERTIES CXX_EXTENSIONS OFF)
 
 add_test(NAME simtlab_operand_test COMMAND simtlab_operand_test)
+
+add_executable(simtlab_instruction_model_test instruction_model_test.cpp)
+
+target_compile_features(simtlab_instruction_model_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_instruction_model_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_instruction_model_test PROPERTIES CXX_EXTENSIONS OFF)
+
+add_test(NAME simtlab_instruction_model_test COMMAND simtlab_instruction_model_test)
