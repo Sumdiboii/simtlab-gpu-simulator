@@ -47,3 +47,10 @@ target_include_directories(simtlab_lexer_test PRIVATE ${PROJECT_SOURCE_DIR}/incl
 set_target_properties(simtlab_lexer_test PROPERTIES CXX_EXTENSIONS OFF)
 
 add_test(NAME simtlab_lexer_test COMMAND simtlab_lexer_test)
+
+add_executable(simtlab_parser_test parser_test.cpp ${PROJECT_SOURCE_DIR}/src/parser.cpp
+    ${PROJECT_SOURCE_DIR}/src/lexer.cpp)
+target_compile_features(simtlab_parser_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_parser_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_parser_test PROPERTIES CXX_EXTENSIONS OFF)
+add_test(NAME simtlab_parser_test COMMAND simtlab_parser_test)

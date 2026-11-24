@@ -9,6 +9,7 @@ option(BUILD_TESTING "Build and register tests" ON)
 add_executable(simtlab
     src/main.cpp
     src/lexer.cpp
+    src/parser.cpp
 )
 target_include_directories(simtlab PRIVATE ${PROJECT_SOURCE_DIR}/include)
 

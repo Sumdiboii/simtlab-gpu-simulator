@@ -1,0 +1,24 @@
+#include <simtlab/isa/parser.hpp>
+
+#include <stdexcept>
+#include <string>
+
+bool rejects(const char* source, const char* location)
+{
+    try { simtlab::parse(source); } catch (const std::runtime_error& error)
+    { return std::string(error.what()).find(location) != std::string::npos; }
+    return false;
+}
+
+int main()
+{
+    const auto empty = simtlab::parse("");
+    const auto blank = simtlab::parse("\n # comment\r\n\t\n");
+    const auto exits = simtlab::parse("EXIT\nexit");
+    if (!empty.instructions.empty() || !empty.labels.empty() || !blank.instructions.empty() || !blank.labels.empty()
+        || exits.instructions.size() != 2 || exits.instructions[0].opcode != simtlab::Opcode::EXIT
+        || !exits.instructions[0].operands.empty() || exits.instructions[1].opcode != simtlab::Opcode::EXIT) return 1;
+    if (!rejects("NOPE", "1:1") || !rejects("EXIT r0", "1:6") || !rejects("@EXIT", "1:1")
+        || !rejects("\n  nope", "2:3")) return 1;
+    return 0;
+}
