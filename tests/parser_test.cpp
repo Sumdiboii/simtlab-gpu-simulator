@@ -1,7 +1,9 @@
 #include <simtlab/isa/parser.hpp>
 
+#include <cstdint>
 #include <stdexcept>
 #include <string>
+#include <variant>
 
 bool rejects(const char* source, const char* location)
 {
@@ -35,5 +37,21 @@ int main()
         duplicate_reported = std::string(error.what()).find("duplicate label at 3:1") != std::string::npos;
     }
     if (!duplicate_reported) return 1;
+    const auto barriers = simtlab::parse("BAR.SYNC 0\nbar.sync +4\nBaR.sYnC 0xF\nBAR.SYNC -0");
+    if (barriers.instructions.size() != 4) return 1;
+    for (const auto& instruction : barriers.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::BAR_SYNC
+            || instruction.operands.size() != 1
+            || !std::holds_alternative<std::uint32_t>(instruction.operands[0])) return 1;
+    }
+    if (std::get<std::uint32_t>(barriers.instructions[0].operands[0]) != 0
+        || std::get<std::uint32_t>(barriers.instructions[1].operands[0]) != 4
+        || std::get<std::uint32_t>(barriers.instructions[2].operands[0]) != 15
+        || std::get<std::uint32_t>(barriers.instructions[3].operands[0]) != 0) return 1;
+    if (!rejects("BAR.SYNC", "1:9") || !rejects("BAR.SYNC 16", "1:10")
+        || !rejects("BAR.SYNC 0x10", "1:10") || !rejects("BAR.SYNC -1", "1:10")
+        || !rejects("BAR.SYNC 1.5", "1:10") || !rejects("BAR.SYNC 1 2", "1:12")
+        || !rejects("BAR.SYNC +", "1:11")) return 1;
     return 0;
 }
