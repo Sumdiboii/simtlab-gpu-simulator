@@ -3,6 +3,7 @@
 #include <simtlab/isa/register.hpp>
 
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -78,8 +79,9 @@ Program parse(std::string_view source)
         const bool isSub = matchesMnemonic(mnemonic.lexeme, "SUB");
         const bool isMul = matchesMnemonic(mnemonic.lexeme, "MUL");
         const bool isFma = matchesMnemonic(mnemonic.lexeme, "FMA");
+        const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd) fail(mnemonic, "unknown mnemonic");
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -226,6 +228,73 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after FMA");
             }
             program.instructions.push_back({Opcode::FMA, {destination, source1, source2, source3}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isAnd)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in AND");
+            ++position;
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in AND");
+            ++position;
+            Operand source2;
+            if (tokens[position].kind == TokenKind::Identifier)
+            {
+                source2 = registerOperand();
+            }
+            else
+            {
+                bool negative = false;
+                if (tokens[position].kind == TokenKind::Plus || tokens[position].kind == TokenKind::Minus)
+                {
+                    negative = tokens[position].kind == TokenKind::Minus;
+                    ++position;
+                }
+                const Token& literal = tokens[position];
+                if (literal.kind != TokenKind::IntegerLiteral) fail(literal, "expected GPR or integer immediate in AND");
+                ++position;
+                std::string_view digits = literal.lexeme;
+                unsigned int base = 10;
+                if (digits.size() > 2 && digits[0] == '0' && digits[1] == 'x')
+                {
+                    digits.remove_prefix(2);
+                    base = 16;
+                }
+                std::uint32_t value = 0;
+                for (const char character : digits)
+                {
+                    unsigned int digit = 0;
+                    if (character >= '0' && character <= '9')
+                        digit = static_cast<unsigned int>(character - '0');
+                    else if (base == 16 && character >= 'a' && character <= 'f')
+                        digit = static_cast<unsigned int>(character - 'a' + 10);
+                    else if (base == 16 && character >= 'A' && character <= 'F')
+                        digit = static_cast<unsigned int>(character - 'A' + 10);
+                    else
+                        fail(literal, "invalid digit in AND immediate");
+                    if (value > (std::numeric_limits<std::uint32_t>::max() - digit) / base)
+                        fail(literal, "AND immediate out of range");
+                    value = value * base + digit;
+                }
+                source2 = negative ? std::uint32_t{0} - value : value;
+            }
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after AND");
+            }
+            program.instructions.push_back({Opcode::AND, {destination, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }

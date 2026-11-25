@@ -132,5 +132,26 @@ int main()
         || !rejects("FMA r0,,r1,r2", "1:8") || !rejects("FMA r0,r1,r2 r3", "1:14")
         || !rejects("FMA r0, r1, rx, r3", "1:13") || !rejects("FMA r0, r1, r32, r3", "1:13")
         || !rejects("FMA r0, r1, r2, 3", "1:17")) return 1;
+    const auto ands = simtlab::parse("AND r0, r31, R0\naNd R31, r0, 0xFF\nAND r1, r2, -1"
+                                     "\nAND r0, r1, -0x1\nAND r0, r1, 4294967295");
+    if (ands.instructions.size() != 5) return 1;
+    for (const auto& instruction : ands.instructions)
+        if (instruction.opcode != simtlab::Opcode::AND || instruction.operands.size() != 3) return 1;
+    if (!std::holds_alternative<simtlab::GprIndex>(ands.instructions[0].operands[2])
+        || std::get<simtlab::GprIndex>(ands.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(ands.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(ands.instructions[0].operands[2]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(ands.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(ands.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || !std::holds_alternative<std::uint32_t>(ands.instructions[1].operands[2])
+        || std::get<std::uint32_t>(ands.instructions[1].operands[2]) != 255
+        || std::get<std::uint32_t>(ands.instructions[2].operands[2]) != 0xFFFFFFFFu
+        || std::get<std::uint32_t>(ands.instructions[3].operands[2]) != 0xFFFFFFFFu
+        || std::get<std::uint32_t>(ands.instructions[4].operands[2]) != 0xFFFFFFFFu) return 1;
+    if (!rejects("AND", "1:4") || !rejects("AND r0, r1,", "1:12")
+        || !rejects("AND r0, r1, r2, r3", "1:15") || !rejects("AND r0 r1, r2", "1:8")
+        || !rejects("AND r0,,r1", "1:8") || !rejects("AND rx, r1, r2", "1:5")
+        || !rejects("AND r32, r1, r2", "1:5") || !rejects("AND r0, r1, 1.5", "1:13")
+        || !rejects("AND r0, r1, 4294967296", "1:13")) return 1;
     return 0;
 }
