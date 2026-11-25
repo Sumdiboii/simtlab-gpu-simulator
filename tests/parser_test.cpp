@@ -172,5 +172,26 @@ int main()
         || !rejects("OR r0, r1, r2, r3", "1:14") || !rejects("OR r0 r1, r2", "1:7")
         || !rejects("OR r0,,r1", "1:7") || !rejects("OR rx, r1, r2", "1:4")
         || !rejects("OR r32, r1, r2", "1:4") || !rejects("OR r0, r1, 1.5", "1:12")) return 1;
+    const auto shls = simtlab::parse("SHL r0, r31, R0\nshl R31, r0, r31\nShL r1, r2, 0"
+                                    "\nSHL r1, r2, 31\nSHL r1, r2, 4294967295\nSHL r1, r2, -0x1");
+    if (shls.instructions.size() != 6) return 1;
+    for (const auto& instruction : shls.instructions)
+        if (instruction.opcode != simtlab::Opcode::SHL || instruction.operands.size() != 3) return 1;
+    if (!std::holds_alternative<simtlab::GprIndex>(shls.instructions[0].operands[2])
+        || std::get<simtlab::GprIndex>(shls.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(shls.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(shls.instructions[0].operands[2]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(shls.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(shls.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || !std::holds_alternative<std::uint32_t>(shls.instructions[2].operands[2])
+        || std::get<std::uint32_t>(shls.instructions[2].operands[2]) != 0
+        || std::get<std::uint32_t>(shls.instructions[3].operands[2]) != 31
+        || std::get<std::uint32_t>(shls.instructions[4].operands[2]) != 0xFFFFFFFFu
+        || std::get<std::uint32_t>(shls.instructions[5].operands[2]) != 0xFFFFFFFFu) return 1;
+    if (!rejects("SHL", "1:4") || !rejects("SHL r0, r1,", "1:12")
+        || !rejects("SHL r0, r1, r2, r3", "1:15") || !rejects("SHL r0 r1, r2", "1:8")
+        || !rejects("SHL r0,,r1", "1:8") || !rejects("SHL rx, r1, r2", "1:5")
+        || !rejects("SHL r32, r1, r2", "1:5") || !rejects("SHL r0, r1, 1.5", "1:13")
+        || !rejects("SHL r0, r1, 4294967296", "1:13")) return 1;
     return 0;
 }
