@@ -252,5 +252,25 @@ int main()
         || !rejects("FMUL r0,,r1", "1:9") || !rejects("FMUL rx, r1, r2", "1:6")
         || !rejects("FMUL r32, r1, r2", "1:6") || !rejects("FMUL r0, r1, 2", "1:14")
         || !rejects("FMUL r0, r1, 1.5", "1:14")) return 1;
+    const auto setpEq = simtlab::parse("SETP.EQ p0, r0, R31\nsetp.eq P3, r31, r0");
+    if (setpEq.instructions.size() != 2) return 1;
+    for (const auto& instruction : setpEq.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::SETP_EQ || instruction.operands.size() != 3) return 1;
+        if (!std::holds_alternative<simtlab::PredicateIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[1])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[2])) return 1;
+    }
+    if (std::get<simtlab::PredicateIndex>(setpEq.instructions[0].operands[0]) != simtlab::PredicateIndex::P0
+        || std::get<simtlab::GprIndex>(setpEq.instructions[0].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(setpEq.instructions[0].operands[2]) != simtlab::GprIndex::R31
+        || std::get<simtlab::PredicateIndex>(setpEq.instructions[1].operands[0]) != simtlab::PredicateIndex::P3
+        || std::get<simtlab::GprIndex>(setpEq.instructions[1].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(setpEq.instructions[1].operands[2]) != simtlab::GprIndex::R0) return 1;
+    if (!rejects("SETP.EQ", "1:8") || !rejects("SETP.EQ p0, r0,", "1:16")
+        || !rejects("SETP.EQ p0, r0, r1, r2", "1:19") || !rejects("SETP.EQ p0 r0, r1", "1:12")
+        || !rejects("SETP.EQ p0,,r0,r1", "1:12") || !rejects("SETP.EQ p4, r0, r1", "1:9")
+        || !rejects("SETP.EQ px, r0, r1", "1:9") || !rejects("SETP.EQ p0, r32, r1", "1:13")
+        || !rejects("SETP.EQ p0, r0, 1", "1:17") || !rejects("SETP.EQ p0, r0, 1.5", "1:17")) return 1;
     return 0;
 }
