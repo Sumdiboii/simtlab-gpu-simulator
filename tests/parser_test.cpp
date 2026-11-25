@@ -214,5 +214,24 @@ int main()
         || !rejects("SHR r0,,r1", "1:8") || !rejects("SHR rx, r1, r2", "1:5")
         || !rejects("SHR r32, r1, r2", "1:5") || !rejects("SHR r0, r1, 1.5", "1:13")
         || !rejects("SHR r0, r1, 4294967296", "1:13")) return 1;
+    const auto fadds = simtlab::parse("FADD r0, R31, r0\nfAdD R31, r0, r31");
+    if (fadds.instructions.size() != 2) return 1;
+    for (const auto& instruction : fadds.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::FADD || instruction.operands.size() != 3) return 1;
+        for (const auto& operand : instruction.operands)
+            if (!std::holds_alternative<simtlab::GprIndex>(operand)) return 1;
+    }
+    if (std::get<simtlab::GprIndex>(fadds.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fadds.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(fadds.instructions[0].operands[2]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fadds.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(fadds.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fadds.instructions[1].operands[2]) != simtlab::GprIndex::R31) return 1;
+    if (!rejects("FADD", "1:5") || !rejects("FADD r0, r1,", "1:13")
+        || !rejects("FADD r0, r1, r2, r3", "1:16") || !rejects("FADD r0 r1, r2", "1:9")
+        || !rejects("FADD r0,,r1", "1:9") || !rejects("FADD rx, r1, r2", "1:6")
+        || !rejects("FADD r32, r1, r2", "1:6") || !rejects("FADD r0, r1, 2", "1:14")
+        || !rejects("FADD r0, r1, 1.5", "1:14")) return 1;
     return 0;
 }
