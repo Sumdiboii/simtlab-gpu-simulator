@@ -233,5 +233,24 @@ int main()
         || !rejects("FADD r0,,r1", "1:9") || !rejects("FADD rx, r1, r2", "1:6")
         || !rejects("FADD r32, r1, r2", "1:6") || !rejects("FADD r0, r1, 2", "1:14")
         || !rejects("FADD r0, r1, 1.5", "1:14")) return 1;
+    const auto fmuls = simtlab::parse("FMUL r0, R31, r0\nfMuL R31, r0, r31");
+    if (fmuls.instructions.size() != 2) return 1;
+    for (const auto& instruction : fmuls.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::FMUL || instruction.operands.size() != 3) return 1;
+        for (const auto& operand : instruction.operands)
+            if (!std::holds_alternative<simtlab::GprIndex>(operand)) return 1;
+    }
+    if (std::get<simtlab::GprIndex>(fmuls.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fmuls.instructions[0].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(fmuls.instructions[0].operands[2]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fmuls.instructions[1].operands[0]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(fmuls.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(fmuls.instructions[1].operands[2]) != simtlab::GprIndex::R31) return 1;
+    if (!rejects("FMUL", "1:5") || !rejects("FMUL r0, r1,", "1:13")
+        || !rejects("FMUL r0, r1, r2, r3", "1:16") || !rejects("FMUL r0 r1, r2", "1:9")
+        || !rejects("FMUL r0,,r1", "1:9") || !rejects("FMUL rx, r1, r2", "1:6")
+        || !rejects("FMUL r32, r1, r2", "1:6") || !rejects("FMUL r0, r1, 2", "1:14")
+        || !rejects("FMUL r0, r1, 1.5", "1:14")) return 1;
     return 0;
 }
