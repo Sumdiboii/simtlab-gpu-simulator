@@ -82,8 +82,9 @@ Program parse(std::string_view source)
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
+        const bool isShr = matchesMnemonic(mnemonic.lexeme, "SHR");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd && !isOr && !isShl) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd && !isOr && !isShl && !isShr) fail(mnemonic, "unknown mnemonic");
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -431,6 +432,73 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after SHL");
             }
             program.instructions.push_back({Opcode::SHL, {destination, source1, source2}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isShr)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SHR");
+            ++position;
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SHR");
+            ++position;
+            Operand source2;
+            if (tokens[position].kind == TokenKind::Identifier)
+            {
+                source2 = registerOperand();
+            }
+            else
+            {
+                bool negative = false;
+                if (tokens[position].kind == TokenKind::Plus || tokens[position].kind == TokenKind::Minus)
+                {
+                    negative = tokens[position].kind == TokenKind::Minus;
+                    ++position;
+                }
+                const Token& literal = tokens[position];
+                if (literal.kind != TokenKind::IntegerLiteral) fail(literal, "expected GPR or integer immediate in SHR");
+                ++position;
+                std::string_view digits = literal.lexeme;
+                unsigned int base = 10;
+                if (digits.size() > 2 && digits[0] == '0' && digits[1] == 'x')
+                {
+                    digits.remove_prefix(2);
+                    base = 16;
+                }
+                std::uint32_t value = 0;
+                for (const char character : digits)
+                {
+                    unsigned int digit = 0;
+                    if (character >= '0' && character <= '9')
+                        digit = static_cast<unsigned int>(character - '0');
+                    else if (base == 16 && character >= 'a' && character <= 'f')
+                        digit = static_cast<unsigned int>(character - 'a' + 10);
+                    else if (base == 16 && character >= 'A' && character <= 'F')
+                        digit = static_cast<unsigned int>(character - 'A' + 10);
+                    else
+                        fail(literal, "invalid digit in SHR immediate");
+                    if (value > (std::numeric_limits<std::uint32_t>::max() - digit) / base)
+                        fail(literal, "SHR immediate out of range");
+                    value = value * base + digit;
+                }
+                source2 = negative ? std::uint32_t{0} - value : value;
+            }
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after SHR");
+            }
+            program.instructions.push_back({Opcode::SHR, {destination, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
