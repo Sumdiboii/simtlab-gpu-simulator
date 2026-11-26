@@ -125,8 +125,13 @@ Program parse(std::string_view source)
             && position + 1 < tokens.size()
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "FNE");
+        const bool isSetpFlt = matchesMnemonic(mnemonic.lexeme, "SETP")
+            && tokens[position].kind == TokenKind::Dot
+            && position + 1 < tokens.size()
+            && tokens[position + 1].kind == TokenKind::Identifier
+            && matchesMnemonic(tokens[position + 1].lexeme, "FLT");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt) fail(mnemonic, "unknown mnemonic");
         if (isSetpEq) position += 2;
         if (isSetpNe) position += 2;
         if (isSetpLt) position += 2;
@@ -135,6 +140,7 @@ Program parse(std::string_view source)
         if (isSetpGe) position += 2;
         if (isSetpFeq) position += 2;
         if (isSetpFne) position += 2;
+        if (isSetpFlt) position += 2;
         if (isBarrier)
         {
             const Token* sign = nullptr;
@@ -891,6 +897,42 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after SETP.FNE");
             }
             program.instructions.push_back({Opcode::SETP_FNE, {predicate, source1, source2}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isSetpFlt)
+        {
+            const Token& predicateToken = tokens[position];
+            PredicateIndex predicate{};
+            if (predicateToken.kind != TokenKind::Identifier || predicateToken.lexeme.size() != 2
+                || (predicateToken.lexeme[0] != 'p' && predicateToken.lexeme[0] != 'P')
+                || predicateToken.lexeme[1] < '0' || predicateToken.lexeme[1] > '3')
+            {
+                fail(predicateToken, "expected predicate register p0-p3");
+            }
+            predicate = static_cast<PredicateIndex>(predicateToken.lexeme[1] - '0');
+            ++position;
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SETP.FLT");
+            ++position;
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected GPR register r0-r31");
+                ++position;
+                return index;
+            };
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SETP.FLT");
+            ++position;
+            const GprIndex source2 = registerOperand();
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after SETP.FLT");
+            }
+            program.instructions.push_back({Opcode::SETP_FLT, {predicate, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
