@@ -356,5 +356,26 @@ int main()
         || !rejects("SETP.GT p4, r0, r1", "1:9") || !rejects("SETP.GT px, r0, r1", "1:9")
         || !rejects("SETP.GT p0, rx, r1", "1:13") || !rejects("SETP.GT p0, r32, r1", "1:13")
         || !rejects("SETP.GT p0, r0, 1", "1:17") || !rejects("SETP.GT p0, r0, 1.5", "1:17")) return 1;
+    const auto setpGe = simtlab::parse("SETP.GE p0, r0, R31\nsEtP.gE P3, r31, r0");
+    if (setpGe.instructions.size() != 2) return 1;
+    for (const auto& instruction : setpGe.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::SETP_GE || instruction.operands.size() != 3) return 1;
+        if (!std::holds_alternative<simtlab::PredicateIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[1])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[2])) return 1;
+    }
+    if (std::get<simtlab::PredicateIndex>(setpGe.instructions[0].operands[0]) != simtlab::PredicateIndex::P0
+        || std::get<simtlab::GprIndex>(setpGe.instructions[0].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(setpGe.instructions[0].operands[2]) != simtlab::GprIndex::R31
+        || std::get<simtlab::PredicateIndex>(setpGe.instructions[1].operands[0]) != simtlab::PredicateIndex::P3
+        || std::get<simtlab::GprIndex>(setpGe.instructions[1].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(setpGe.instructions[1].operands[2]) != simtlab::GprIndex::R0) return 1;
+    if (!rejects("SETP.GE", "1:8") || !rejects("SETP.GE p0, r0,", "1:16")
+        || !rejects("SETP.GE p0, r0, r1, r2", "1:19") || !rejects("SETP.GE p0 r0, r1", "1:12")
+        || !rejects("SETP.GE p0,,r0,r1", "1:12") || !rejects("SETP.GE p0, r0 r1", "1:16")
+        || !rejects("SETP.GE p4, r0, r1", "1:9") || !rejects("SETP.GE px, r0, r1", "1:9")
+        || !rejects("SETP.GE p0, rx, r1", "1:13") || !rejects("SETP.GE p0, r32, r1", "1:13")
+        || !rejects("SETP.GE p0, r0, 1", "1:17") || !rejects("SETP.GE p0, r0, 1.5", "1:17")) return 1;
     return 0;
 }
