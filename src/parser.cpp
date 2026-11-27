@@ -86,6 +86,11 @@ Program parse(std::string_view source)
         const bool isBra = matchesMnemonic(mnemonic.lexeme, "BRA");
         const bool isJmp = matchesMnemonic(mnemonic.lexeme, "JMP");
         const bool isSreg = matchesMnemonic(mnemonic.lexeme, "SREG");
+        const bool isMma = matchesMnemonic(mnemonic.lexeme, "MMA")
+            && tokens[position].kind == TokenKind::Dot
+            && position + 1 < tokens.size()
+            && tokens[position + 1].kind == TokenKind::Identifier
+            && matchesMnemonic(tokens[position + 1].lexeme, "M16N16K16");
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
@@ -153,7 +158,8 @@ Program parse(std::string_view source)
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "FGE");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isBra && !isJmp && !isSreg && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
+        else if (isMma) position += 2;
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isBra && !isJmp && !isSreg && !isMma && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
         if (isSetpEq) position += 2;
         if (isSetpNe) position += 2;
         if (isSetpLt) position += 2;
@@ -286,6 +292,51 @@ Program parse(std::string_view source)
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after SREG");
             program.instructions.push_back({Opcode::SREG, {destination, special}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isMma)
+        {
+            auto registerOperand = [&]()
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, "expected MMA base GPR r0-r31");
+                ++position;
+                return index;
+            };
+            const Token& destinationToken = tokens[position];
+            const GprIndex destination = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after MMA destination");
+            ++position;
+            const Token& source1Token = tokens[position];
+            const GprIndex source1 = registerOperand();
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after MMA source 1");
+            ++position;
+            const Token& source2Token = tokens[position];
+            const GprIndex source2 = registerOperand();
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+                fail(tokens[position], "unexpected operand after MMA.M16N16K16");
+            auto validateSpan = [&](GprIndex base, const Token& token)
+            {
+                if (static_cast<unsigned int>(base) + 7 > MAX_GPR_INDEX)
+                    fail(token, "MMA register span must fit within r0-r31");
+            };
+            validateSpan(destination, destinationToken);
+            validateSpan(source1, source1Token);
+            validateSpan(source2, source2Token);
+            auto spansOverlap = [](GprIndex left, GprIndex right)
+            {
+                const unsigned int leftBase = static_cast<unsigned int>(left);
+                const unsigned int rightBase = static_cast<unsigned int>(right);
+                return leftBase <= rightBase + 7 && rightBase <= leftBase + 7;
+            };
+            if (spansOverlap(destination, source1)) fail(source1Token, "MMA register spans must be pairwise disjoint");
+            if (spansOverlap(destination, source2) || spansOverlap(source1, source2))
+                fail(source2Token, "MMA register spans must be pairwise disjoint");
+            program.instructions.push_back({Opcode::MMA_M16N16K16, {destination, source1, source2}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }

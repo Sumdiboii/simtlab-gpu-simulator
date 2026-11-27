@@ -95,6 +95,30 @@ int main()
         || !rejects("SREG r0, UNKNOWN", "1:10") || !rejects("SREG r0, TID", "1:13")
         || !rejects("SREG r0, TID X", "1:14") || !rejects("SREG r0, TID.W", "1:14")
         || !rejects("SREG r0, LANEID, r1", "1:16") || !rejects("SREG r0 LANEID", "1:9")) return 1;
+    const auto mma = simtlab::parse("mma.m16n16k16 r0, r8, r16\nMMA.M16N16K16 R24, r0, r8");
+    if (mma.instructions.size() != 2) return 1;
+    for (const auto& instruction : mma.instructions)
+        if (instruction.opcode != simtlab::Opcode::MMA_M16N16K16 || instruction.operands.size() != 3
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[1])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[2])) return 1;
+    if (std::get<simtlab::GprIndex>(mma.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(mma.instructions[0].operands[1]) != simtlab::GprIndex::R8
+        || std::get<simtlab::GprIndex>(mma.instructions[0].operands[2]) != simtlab::GprIndex::R16
+        || std::get<simtlab::GprIndex>(mma.instructions[1].operands[0]) != simtlab::GprIndex::R24
+        || std::get<simtlab::GprIndex>(mma.instructions[1].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(mma.instructions[1].operands[2]) != simtlab::GprIndex::R8) return 1;
+    if (!rejects("MMA.M16N16K16", "1:14") || !rejects("MMA.M16N16K16 r0", "1:17")
+        || !rejects("MMA.M16N16K16 r0, r8", "1:21")
+        || !rejects("MMA.M16N16K16 r0, r8, r16, r24", "1:26")
+        || !rejects("MMA.M16N16K16 r0 r8, r16", "1:18")
+        || !rejects("MMA.M16N16K16 r0, r8 r16", "1:22")
+        || !rejects("MMA.M16N16K16 r32, r8, r16", "1:15")
+        || !rejects("MMA.M16N16K16 rX, r8, r16", "1:15")
+        || !rejects("MMA.M16N16K16 r25, r0, r8", "1:15")
+        || !rejects("MMA.M16N16K16 r0, r7, r16", "1:19")
+        || !rejects("MMA.M16N16K16 r0, r8, r12", "1:23")
+        || !rejects("MMA.M16N16K8 r0, r8, r16", "1:1")) return 1;
     const auto barriers = simtlab::parse("BAR.SYNC 0\nbar.sync +4\nBaR.sYnC 0xF\nBAR.SYNC -0");
     if (barriers.instructions.size() != 4) return 1;
     for (const auto& instruction : barriers.instructions)
