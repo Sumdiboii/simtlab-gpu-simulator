@@ -571,5 +571,36 @@ int main()
         || !rejects("STG [r1], r0, 3", "1:15") || !rejects("STG [r1], r0, 0", "1:15")
         || !rejects("STG [r1], r0, 8", "1:15") || !rejects("STG [r1], r0, 1.5", "1:15")
         || !rejects("STG [r1], r0, 4, 1", "1:16") || !rejects("STG [r1+], r0, 4", "1:9")) return 1;
+    const auto ldss = simtlab::parse("LDS r0, [r31], 1\nlds R31, [r0+4], 2\nLdS r1, [r2-0x10], 4"
+                                     "\nLDS r2, [r3+r31], 4\nLDS r4, [r5+2147483647], 4"
+                                     "\nLDS r6, [r7-0x80000000], 1");
+    if (ldss.instructions.size() != 6) return 1;
+    for (const auto& instruction : ldss.instructions)
+        if (instruction.opcode != simtlab::Opcode::LDS || instruction.operands.size() != 3
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::MemoryOperand>(instruction.operands[1])
+            || !std::holds_alternative<simtlab::MemoryWidth>(instruction.operands[2])) return 1;
+    if (std::get<simtlab::GprIndex>(ldss.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::MemoryOperand>(ldss.instructions[0].operands[1]).base != simtlab::GprIndex::R31
+        || !std::holds_alternative<std::monostate>(std::get<simtlab::MemoryOperand>(ldss.instructions[0].operands[1]).offset)
+        || std::get<simtlab::MemoryWidth>(ldss.instructions[0].operands[2]) != simtlab::MemoryWidth::BYTE
+        || std::get<std::int32_t>(std::get<simtlab::MemoryOperand>(ldss.instructions[1].operands[1]).offset) != 4
+        || std::get<simtlab::MemoryWidth>(ldss.instructions[1].operands[2]) != simtlab::MemoryWidth::HALFWORD
+        || std::get<std::int32_t>(std::get<simtlab::MemoryOperand>(ldss.instructions[2].operands[1]).offset) != -16
+        || std::get<simtlab::GprIndex>(std::get<simtlab::MemoryOperand>(ldss.instructions[3].operands[1]).offset) != simtlab::GprIndex::R31
+        || std::get<std::int32_t>(std::get<simtlab::MemoryOperand>(ldss.instructions[4].operands[1]).offset) != std::int32_t{2147483647}
+        || std::get<std::int32_t>(std::get<simtlab::MemoryOperand>(ldss.instructions[5].operands[1]).offset) != std::int32_t{-2147483647 - 1}
+        || std::get<simtlab::MemoryWidth>(ldss.instructions[2].operands[2]) != simtlab::MemoryWidth::WORD) return 1;
+    if (!rejects("LDS", "1:4") || !rejects("LDS r32, [r1], 4", "1:5")
+        || !rejects("LDS rx, [r1], 4", "1:5") || !rejects("LDS r0", "1:7")
+        || !rejects("LDS r0, r1, 4", "1:9") || !rejects("LDS r0, [r1, 4", "1:12")
+        || !rejects("LDS r0, r1], 4", "1:9") || !rejects("LDS r0, [r32], 4", "1:10")
+        || !rejects("LDS r0, [r1+r32], 4", "1:13") || !rejects("LDS r0, [r1-r2], 4", "1:13")
+        || !rejects("LDS r0, [r1+1.5], 4", "1:13") || !rejects("LDS r0, [r1+2147483648], 4", "1:13")
+        || !rejects("LDS r0, [r1-2147483649], 4", "1:13") || !rejects("LDS r0, [r1],", "1:14")
+        || !rejects("LDS r0, [r1], 3", "1:15") || !rejects("LDS r0, [r1], 0", "1:15")
+        || !rejects("LDS r0, [r1], 8", "1:15") || !rejects("LDS r0, [r1], 1.5", "1:15")
+        || !rejects("LDS r0, [r1], 4, 1", "1:16") || !rejects("LDS r0 [r1], 4", "1:8")
+        || !rejects("LDS r0, [r1] 4", "1:14") || !rejects("LDS r0, [r1+], 4", "1:13")) return 1;
     return 0;
 }
