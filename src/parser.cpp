@@ -79,6 +79,7 @@ Program parse(std::string_view source)
         const bool isSub = matchesMnemonic(mnemonic.lexeme, "SUB");
         const bool isMul = matchesMnemonic(mnemonic.lexeme, "MUL");
         const bool isFma = matchesMnemonic(mnemonic.lexeme, "FMA");
+        const bool isLdg = matchesMnemonic(mnemonic.lexeme, "LDG");
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
@@ -146,7 +147,7 @@ Program parse(std::string_view source)
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "FGE");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
         if (isSetpEq) position += 2;
         if (isSetpNe) position += 2;
         if (isSetpLt) position += 2;
@@ -627,6 +628,96 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after FMUL");
             }
             program.instructions.push_back({Opcode::FMUL, {destination, source1, source2}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isLdg)
+        {
+            auto registerOperand = [&](const char* expected)
+            {
+                const Token& token = tokens[position];
+                GprIndex index{};
+                if (token.kind != TokenKind::Identifier || !parseGpr(token.lexeme, index))
+                    fail(token, expected);
+                ++position;
+                return index;
+            };
+            auto integerMagnitude = [&](const Token& token)
+            {
+                if (token.kind != TokenKind::IntegerLiteral) fail(token, "expected integer literal in LDG");
+                std::string_view digits = token.lexeme;
+                unsigned int base = 10;
+                if (digits.size() > 2 && digits[0] == '0' && digits[1] == 'x')
+                {
+                    digits.remove_prefix(2);
+                    base = 16;
+                }
+                std::uint64_t value = 0;
+                for (const char character : digits)
+                {
+                    unsigned int digit = 0;
+                    if (character >= '0' && character <= '9')
+                        digit = static_cast<unsigned int>(character - '0');
+                    else if (base == 16 && character >= 'a' && character <= 'f')
+                        digit = static_cast<unsigned int>(character - 'a' + 10);
+                    else if (base == 16 && character >= 'A' && character <= 'F')
+                        digit = static_cast<unsigned int>(character - 'A' + 10);
+                    else
+                        fail(token, "invalid digit in LDG integer literal");
+                    if (value > (std::numeric_limits<std::uint64_t>::max() - digit) / base)
+                        fail(token, "LDG integer literal out of range");
+                    value = value * base + digit;
+                }
+                return value;
+            };
+
+            const GprIndex destination = registerOperand("expected GPR destination r0-r31 in LDG");
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after LDG destination");
+            ++position;
+            if (tokens[position].kind != TokenKind::LeftBracket) fail(tokens[position], "expected '[' before LDG address");
+            ++position;
+            const GprIndex base = registerOperand("expected GPR base register r0-r31 in LDG address");
+            std::variant<std::monostate, std::int32_t, GprIndex> offset;
+            if (tokens[position].kind == TokenKind::Plus)
+            {
+                ++position;
+                if (tokens[position].kind == TokenKind::Identifier)
+                {
+                    offset = registerOperand("expected GPR offset register r0-r31");
+                }
+                else
+                {
+                    const Token& literal = tokens[position++];
+                    const std::uint64_t value = integerMagnitude(literal);
+                    if (value > static_cast<std::uint64_t>(std::numeric_limits<std::int32_t>::max()))
+                        fail(literal, "LDG displacement out of signed 32-bit range");
+                    offset = static_cast<std::int32_t>(value);
+                }
+            }
+            else if (tokens[position].kind == TokenKind::Minus)
+            {
+                ++position;
+                const Token& literal = tokens[position++];
+                const std::uint64_t value = integerMagnitude(literal);
+                const std::uint64_t minMagnitude = std::uint64_t{1} << 31;
+                if (value > minMagnitude) fail(literal, "LDG displacement out of signed 32-bit range");
+                offset = value == minMagnitude ? std::numeric_limits<std::int32_t>::min()
+                                               : -static_cast<std::int32_t>(value);
+            }
+            if (tokens[position].kind != TokenKind::RightBracket) fail(tokens[position], "expected ']' after LDG address");
+            ++position;
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after LDG address");
+            ++position;
+            const Token& widthToken = tokens[position++];
+            const std::uint64_t width = integerMagnitude(widthToken);
+            if (width != 1 && width != 2 && width != 4) fail(widthToken, "LDG width must be 1, 2, or 4");
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+            {
+                fail(tokens[position], "unexpected operand after LDG");
+            }
+            program.instructions.push_back({Opcode::LDG,
+                {destination, MemoryOperand{base, offset}, static_cast<MemoryWidth>(width)}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
