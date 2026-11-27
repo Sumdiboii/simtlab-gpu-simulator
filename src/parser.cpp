@@ -83,6 +83,7 @@ Program parse(std::string_view source)
         const bool isStg = matchesMnemonic(mnemonic.lexeme, "STG");
         const bool isLds = matchesMnemonic(mnemonic.lexeme, "LDS");
         const bool isSts = matchesMnemonic(mnemonic.lexeme, "STS");
+        const bool isBra = matchesMnemonic(mnemonic.lexeme, "BRA");
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
@@ -150,7 +151,7 @@ Program parse(std::string_view source)
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "FGE");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isBra && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
         if (isSetpEq) position += 2;
         if (isSetpNe) position += 2;
         if (isSetpLt) position += 2;
@@ -198,6 +199,24 @@ Program parse(std::string_view source)
             }
             if (negative && value != 0) fail(*sign, "BAR.SYNC ID must be 0 through 15");
             program.instructions.push_back({Opcode::BAR_SYNC, {std::uint32_t{value}}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isBra)
+        {
+            const Token& target = tokens[position];
+            if (target.kind != TokenKind::Identifier) fail(target, "expected BRA target label");
+            ++position;
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after BRA target");
+            ++position;
+            const Token& reconv = tokens[position];
+            if (reconv.kind != TokenKind::Identifier) fail(reconv, "expected BRA reconvergence label");
+            ++position;
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+                fail(tokens[position], "unexpected operand after BRA");
+            program.instructions.push_back({Opcode::BRA,
+                {LabelOperand{target.lexeme}, LabelOperand{reconv.lexeme}}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }

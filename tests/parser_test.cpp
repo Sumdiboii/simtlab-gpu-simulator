@@ -38,6 +38,22 @@ int main()
         duplicate_reported = std::string(error.what()).find("duplicate label at 3:1") != std::string::npos;
     }
     if (!duplicate_reported) return 1;
+    const auto branches = simtlab::parse("bRa forward_target, reconv\nforward_target:\nEXIT\nreconv:");
+    if (branches.instructions.size() != 2 || branches.instructions[0].opcode != simtlab::Opcode::BRA
+        || branches.instructions[0].operands.size() != 2
+        || !std::holds_alternative<simtlab::LabelOperand>(branches.instructions[0].operands[0])
+        || !std::holds_alternative<simtlab::LabelOperand>(branches.instructions[0].operands[1])
+        || std::get<simtlab::LabelOperand>(branches.instructions[0].operands[0]).name != "forward_target"
+        || std::get<simtlab::LabelOperand>(branches.instructions[0].operands[1]).name != "reconv"
+        || branches.labels.at("forward_target") != 1 || branches.labels.at("reconv") != 2) return 1;
+    const auto backward_branch = simtlab::parse("begin:\nEXIT\nBRA begin, begin");
+    if (backward_branch.instructions.size() != 2 || backward_branch.instructions[1].opcode != simtlab::Opcode::BRA
+        || std::get<simtlab::LabelOperand>(backward_branch.instructions[1].operands[0]).name != "begin"
+        || std::get<simtlab::LabelOperand>(backward_branch.instructions[1].operands[1]).name != "begin") return 1;
+    if (!rejects("BRA", "1:4") || !rejects("BRA target", "1:11")
+        || !rejects("BRA target,", "1:12") || !rejects("BRA 4, reconv", "1:5")
+        || !rejects("BRA target, 4", "1:13") || !rejects("BRA target reconv", "1:12")
+        || !rejects("BRA target, reconv, extra", "1:19") || !rejects("BRA @target, reconv", "1:5")) return 1;
     const auto barriers = simtlab::parse("BAR.SYNC 0\nbar.sync +4\nBaR.sYnC 0xF\nBAR.SYNC -0");
     if (barriers.instructions.size() != 4) return 1;
     for (const auto& instruction : barriers.instructions)
