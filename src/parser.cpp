@@ -85,6 +85,7 @@ Program parse(std::string_view source)
         const bool isSts = matchesMnemonic(mnemonic.lexeme, "STS");
         const bool isBra = matchesMnemonic(mnemonic.lexeme, "BRA");
         const bool isJmp = matchesMnemonic(mnemonic.lexeme, "JMP");
+        const bool isSreg = matchesMnemonic(mnemonic.lexeme, "SREG");
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
@@ -152,7 +153,7 @@ Program parse(std::string_view source)
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "FGE");
         if (isBarrier) position += 2;
-        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isBra && !isJmp && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
+        else if (!matchesMnemonic(mnemonic.lexeme, "EXIT") && !isAdd && !isSub && !isMul && !isFma && !isLdg && !isStg && !isLds && !isSts && !isBra && !isJmp && !isSreg && !isAnd && !isOr && !isShl && !isShr && !isFadd && !isFmul && !isSetpEq && !isSetpNe && !isSetpLt && !isSetpLe && !isSetpGt && !isSetpGe && !isSetpFeq && !isSetpFne && !isSetpFlt && !isSetpFle && !isSetpFgt && !isSetpFge) fail(mnemonic, "unknown mnemonic");
         if (isSetpEq) position += 2;
         if (isSetpNe) position += 2;
         if (isSetpLt) position += 2;
@@ -230,6 +231,61 @@ Program parse(std::string_view source)
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after JMP");
             program.instructions.push_back({Opcode::JMP, {LabelOperand{target.lexeme}}, {}});
+            if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+            continue;
+        }
+        if (isSreg)
+        {
+            const Token& destinationToken = tokens[position];
+            GprIndex destination{};
+            if (destinationToken.kind != TokenKind::Identifier || !parseGpr(destinationToken.lexeme, destination))
+                fail(destinationToken, "expected GPR destination r0-r31 in SREG");
+            ++position;
+            if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma after SREG destination");
+            ++position;
+            const Token& specialToken = tokens[position];
+            if (specialToken.kind != TokenKind::Identifier) fail(specialToken, "expected special register in SREG");
+            SpecialRegister special{};
+            if (matchesMnemonic(specialToken.lexeme, "LANEID"))
+            {
+                special = SpecialRegister::LANEID;
+                ++position;
+            }
+            else if (matchesMnemonic(specialToken.lexeme, "WARPID"))
+            {
+                special = SpecialRegister::WARPID;
+                ++position;
+            }
+            else if (matchesMnemonic(specialToken.lexeme, "TID")
+                     || matchesMnemonic(specialToken.lexeme, "CTAID")
+                     || matchesMnemonic(specialToken.lexeme, "NTID")
+                     || matchesMnemonic(specialToken.lexeme, "GRIDID"))
+            {
+                const bool tid = matchesMnemonic(specialToken.lexeme, "TID");
+                const bool ctaid = matchesMnemonic(specialToken.lexeme, "CTAID");
+                const bool ntid = matchesMnemonic(specialToken.lexeme, "NTID");
+                ++position;
+                if (tokens[position].kind != TokenKind::Dot) fail(tokens[position], "expected '.' in SREG coordinate name");
+                ++position;
+                const Token& axis = tokens[position];
+                if (axis.kind != TokenKind::Identifier) fail(axis, "expected X, Y, or Z in SREG coordinate name");
+                if (matchesMnemonic(axis.lexeme, "X"))
+                    special = tid ? SpecialRegister::TID_X : ctaid ? SpecialRegister::CTAID_X
+                        : ntid ? SpecialRegister::NTID_X : SpecialRegister::GRIDID_X;
+                else if (matchesMnemonic(axis.lexeme, "Y"))
+                    special = tid ? SpecialRegister::TID_Y : ctaid ? SpecialRegister::CTAID_Y
+                        : ntid ? SpecialRegister::NTID_Y : SpecialRegister::GRIDID_Y;
+                else if (matchesMnemonic(axis.lexeme, "Z"))
+                    special = tid ? SpecialRegister::TID_Z : ctaid ? SpecialRegister::CTAID_Z
+                        : ntid ? SpecialRegister::NTID_Z : SpecialRegister::GRIDID_Z;
+                else fail(axis, "unsupported SREG coordinate axis");
+                ++position;
+            }
+            else fail(specialToken, "unsupported special register in SREG");
+            if (tokens[position].kind != TokenKind::EndOfLine
+                && tokens[position].kind != TokenKind::EndOfFile)
+                fail(tokens[position], "unexpected operand after SREG");
+            program.instructions.push_back({Opcode::SREG, {destination, special}, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }

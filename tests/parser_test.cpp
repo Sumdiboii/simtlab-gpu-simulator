@@ -67,6 +67,34 @@ int main()
     if (!rejects("JMP", "1:4") || !rejects("JMP target extra", "1:12")
         || !rejects("JMP 3", "1:5") || !rejects("JMP @target", "1:5")
         || !rejects("JMP target, other", "1:11")) return 1;
+    const auto specialReads = simtlab::parse(
+        "sreg r0, laneid\nSReG R31, wArPiD\nSREG r0, TID.X\nSREG r0, TID.Y\nSREG r0, TID.Z"
+        "\nSREG r0, CTAID.X\nSREG r0, CTAID.Y\nSREG r0, CTAID.Z"
+        "\nSREG r0, NTID.X\nSREG r0, NTID.Y\nSREG r0, NTID.Z"
+        "\nSREG r0, GRIDID.X\nSREG r0, GRIDID.Y\nSREG r0, GRIDID.Z");
+    const simtlab::SpecialRegister expectedSpecials[] = {
+        simtlab::SpecialRegister::LANEID, simtlab::SpecialRegister::WARPID,
+        simtlab::SpecialRegister::TID_X, simtlab::SpecialRegister::TID_Y, simtlab::SpecialRegister::TID_Z,
+        simtlab::SpecialRegister::CTAID_X, simtlab::SpecialRegister::CTAID_Y, simtlab::SpecialRegister::CTAID_Z,
+        simtlab::SpecialRegister::NTID_X, simtlab::SpecialRegister::NTID_Y, simtlab::SpecialRegister::NTID_Z,
+        simtlab::SpecialRegister::GRIDID_X, simtlab::SpecialRegister::GRIDID_Y, simtlab::SpecialRegister::GRIDID_Z};
+    if (specialReads.instructions.size() != 14) return 1;
+    for (std::size_t i = 0; i < specialReads.instructions.size(); ++i)
+    {
+        const auto& instruction = specialReads.instructions[i];
+        if (instruction.opcode != simtlab::Opcode::SREG || instruction.operands.size() != 2
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::SpecialRegister>(instruction.operands[1])
+            || std::get<simtlab::SpecialRegister>(instruction.operands[1]) != expectedSpecials[i]) return 1;
+    }
+    if (std::get<simtlab::GprIndex>(specialReads.instructions[0].operands[0]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(specialReads.instructions[1].operands[0]) != simtlab::GprIndex::R31) return 1;
+    if (!rejects("SREG", "1:5") || !rejects("SREG r0", "1:8")
+        || !rejects("SREG r0,", "1:9") || !rejects("SREG p0, LANEID", "1:6")
+        || !rejects("SREG r32, LANEID", "1:6") || !rejects("SREG rx, LANEID", "1:6")
+        || !rejects("SREG r0, UNKNOWN", "1:10") || !rejects("SREG r0, TID", "1:13")
+        || !rejects("SREG r0, TID X", "1:14") || !rejects("SREG r0, TID.W", "1:14")
+        || !rejects("SREG r0, LANEID, r1", "1:16") || !rejects("SREG r0 LANEID", "1:9")) return 1;
     const auto barriers = simtlab::parse("BAR.SYNC 0\nbar.sync +4\nBaR.sYnC 0xF\nBAR.SYNC -0");
     if (barriers.instructions.size() != 4) return 1;
     for (const auto& instruction : barriers.instructions)
