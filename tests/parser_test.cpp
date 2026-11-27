@@ -440,5 +440,26 @@ int main()
         || !rejects("SETP.FLT p4, r0, r1", "1:10") || !rejects("SETP.FLT px, r0, r1", "1:10")
         || !rejects("SETP.FLT p0, rx, r1", "1:14") || !rejects("SETP.FLT p0, r32, r1", "1:14")
         || !rejects("SETP.FLT p0, r0, 1", "1:18") || !rejects("SETP.FLT p0, r0, 1.5", "1:18")) return 1;
+    const auto setpFle = simtlab::parse("SETP.FLE p0, r0, R31\nsEtP.fLe P3, r31, r0");
+    if (setpFle.instructions.size() != 2) return 1;
+    for (const auto& instruction : setpFle.instructions)
+    {
+        if (instruction.opcode != simtlab::Opcode::SETP_FLE || instruction.operands.size() != 3) return 1;
+        if (!std::holds_alternative<simtlab::PredicateIndex>(instruction.operands[0])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[1])
+            || !std::holds_alternative<simtlab::GprIndex>(instruction.operands[2])) return 1;
+    }
+    if (std::get<simtlab::PredicateIndex>(setpFle.instructions[0].operands[0]) != simtlab::PredicateIndex::P0
+        || std::get<simtlab::GprIndex>(setpFle.instructions[0].operands[1]) != simtlab::GprIndex::R0
+        || std::get<simtlab::GprIndex>(setpFle.instructions[0].operands[2]) != simtlab::GprIndex::R31
+        || std::get<simtlab::PredicateIndex>(setpFle.instructions[1].operands[0]) != simtlab::PredicateIndex::P3
+        || std::get<simtlab::GprIndex>(setpFle.instructions[1].operands[1]) != simtlab::GprIndex::R31
+        || std::get<simtlab::GprIndex>(setpFle.instructions[1].operands[2]) != simtlab::GprIndex::R0) return 1;
+    if (!rejects("SETP.FLE", "1:9") || !rejects("SETP.FLE p0, r0,", "1:17")
+        || !rejects("SETP.FLE p0, r0, r1, r2", "1:20") || !rejects("SETP.FLE p0 r0, r1", "1:13")
+        || !rejects("SETP.FLE p0,,r0,r1", "1:13") || !rejects("SETP.FLE p0, r0 r1", "1:17")
+        || !rejects("SETP.FLE p4, r0, r1", "1:10") || !rejects("SETP.FLE px, r0, r1", "1:10")
+        || !rejects("SETP.FLE p0, rx, r1", "1:14") || !rejects("SETP.FLE p0, r32, r1", "1:14")
+        || !rejects("SETP.FLE p0, r0, 1", "1:18") || !rejects("SETP.FLE p0, r0, 1.5", "1:18")) return 1;
     return 0;
 }
