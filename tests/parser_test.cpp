@@ -54,6 +54,19 @@ int main()
         || !rejects("BRA target,", "1:12") || !rejects("BRA 4, reconv", "1:5")
         || !rejects("BRA target, 4", "1:13") || !rejects("BRA target reconv", "1:12")
         || !rejects("BRA target, reconv, extra", "1:19") || !rejects("BRA @target, reconv", "1:5")) return 1;
+    const auto jumps = simtlab::parse("jMp forward_target\nforward_target:\nEXIT");
+    if (jumps.instructions.size() != 2 || jumps.instructions[0].opcode != simtlab::Opcode::JMP
+        || jumps.instructions[0].operands.size() != 1
+        || !std::holds_alternative<simtlab::LabelOperand>(jumps.instructions[0].operands[0])
+        || std::get<simtlab::LabelOperand>(jumps.instructions[0].operands[0]).name != "forward_target"
+        || jumps.labels.at("forward_target") != 1) return 1;
+    const auto backward_jump = simtlab::parse("start:\nEXIT\nJMP start");
+    if (backward_jump.instructions.size() != 2 || backward_jump.instructions[1].opcode != simtlab::Opcode::JMP
+        || backward_jump.instructions[1].operands.size() != 1
+        || std::get<simtlab::LabelOperand>(backward_jump.instructions[1].operands[0]).name != "start") return 1;
+    if (!rejects("JMP", "1:4") || !rejects("JMP target extra", "1:12")
+        || !rejects("JMP 3", "1:5") || !rejects("JMP @target", "1:5")
+        || !rejects("JMP target, other", "1:11")) return 1;
     const auto barriers = simtlab::parse("BAR.SYNC 0\nbar.sync +4\nBaR.sYnC 0xF\nBAR.SYNC -0");
     if (barriers.instructions.size() != 4) return 1;
     for (const auto& instruction : barriers.instructions)
