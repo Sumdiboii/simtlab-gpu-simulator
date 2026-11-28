@@ -3,7 +3,9 @@
 #include <simtlab/isa/parser.hpp>
 #include <simtlab/isa/warp.hpp>
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 #include <utility>
 
@@ -13,55 +15,36 @@ namespace simtlab
 class ExecutionState
 {
 public:
+    // Copy construction snapshots state; move construction transfers it and empties the source.
+    // Assignment is disabled so an existing execution cannot replace its retired-lane history.
     explicit ExecutionState(Program program)
-        : program_(std::move(program)), terminated_(program_.instructions.empty())
+        : program_(std::move(program))
     {
+        if (program_.instructions.empty()) warp_.active_mask_ = 0;
     }
 
     ExecutionState(const ExecutionState&) = default;
-    ExecutionState& operator=(const ExecutionState&) = default;
+    ExecutionState& operator=(const ExecutionState&) = delete;
 
     ExecutionState(ExecutionState&& other) noexcept
-        : program_(std::move(other.program_)), pc_(other.pc_), warp_(std::move(other.warp_)),
-          terminated_(other.terminated_)
+        : program_(std::move(other.program_)), pc_(other.pc_), warp_(std::move(other.warp_))
     {
         other.resetMovedFrom();
     }
 
-    ExecutionState& operator=(ExecutionState&& other) noexcept
-    {
-        if (this != &other)
-        {
-            program_ = std::move(other.program_);
-            pc_ = other.pc_;
-            warp_ = std::move(other.warp_);
-            terminated_ = other.terminated_;
-            other.resetMovedFrom();
-        }
-        return *this;
-    }
+    ExecutionState& operator=(ExecutionState&&) = delete;
 
     const Program& program() const noexcept { return program_; }
     std::size_t pc() const noexcept { return pc_; }
-    Warp& warp() noexcept { return warp_; }
-    const Warp& warp() const noexcept { return warp_; }
-    bool terminated() const noexcept { return terminated_; }
+    std::array<LaneState, WARP_SIZE>& lanes() noexcept { return warp_.lanes; }
+    const std::array<LaneState, WARP_SIZE>& lanes() const noexcept { return warp_.lanes; }
+    std::uint32_t activeMask() const noexcept { return warp_.active_mask_; }
+    bool terminated() const noexcept { return warp_.active_mask_ == 0; }
 
-    const Instruction& currentInstruction() const
-    {
-        if (terminated_ || pc_ >= program_.instructions.size())
-            throw std::out_of_range("program counter is past the end of the program");
-        return program_.instructions[pc_];
-    }
+    const Instruction& currentInstruction() const;
 
     // Advance only the PC; callers handle instruction semantics separately.
-    void advanceProgramCounter()
-    {
-        if (terminated_ || pc_ >= program_.instructions.size())
-            throw std::out_of_range("cannot advance a terminated execution state");
-        ++pc_;
-        terminated_ = pc_ == program_.instructions.size();
-    }
+    void advanceProgramCounter();
 
     void step();
 
@@ -71,13 +54,14 @@ private:
         program_ = Program{};
         pc_ = 0;
         warp_ = Warp{};
-        terminated_ = true;
+        warp_.active_mask_ = 0;
     }
 
     Program program_;
     std::size_t pc_ = 0;
     Warp warp_{};
-    bool terminated_ = false;
+    void executeInstruction(const Instruction& instruction);
+    void advanceProgramCounterUnchecked();
 };
 
 } // namespace simtlab

@@ -55,7 +55,8 @@ target_include_directories(simtlab_parser_test PRIVATE ${PROJECT_SOURCE_DIR}/inc
 set_target_properties(simtlab_parser_test PROPERTIES CXX_EXTENSIONS OFF)
 add_test(NAME simtlab_parser_test COMMAND simtlab_parser_test)
 
-add_executable(simtlab_execution_state_test execution_state_test.cpp ${PROJECT_SOURCE_DIR}/src/parser.cpp
+add_executable(simtlab_execution_state_test execution_state_test.cpp ${PROJECT_SOURCE_DIR}/src/execution_state.cpp
+    ${PROJECT_SOURCE_DIR}/src/parser.cpp
     ${PROJECT_SOURCE_DIR}/src/lexer.cpp)
 target_compile_features(simtlab_execution_state_test PRIVATE cxx_std_20)
 target_include_directories(simtlab_execution_state_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
@@ -69,3 +70,11 @@ target_compile_features(simtlab_arithmetic_execution_test PRIVATE cxx_std_20)
 target_include_directories(simtlab_arithmetic_execution_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
 set_target_properties(simtlab_arithmetic_execution_test PROPERTIES CXX_EXTENSIONS OFF)
 add_test(NAME simtlab_arithmetic_execution_test COMMAND simtlab_arithmetic_execution_test)
+
+add_executable(simtlab_predicate_execution_test predicate_execution_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/execution_state.cpp ${PROJECT_SOURCE_DIR}/src/parser.cpp
+    ${PROJECT_SOURCE_DIR}/src/lexer.cpp)
+target_compile_features(simtlab_predicate_execution_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_predicate_execution_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_predicate_execution_test PROPERTIES CXX_EXTENSIONS OFF)
+add_test(NAME simtlab_predicate_execution_test COMMAND simtlab_predicate_execution_test)

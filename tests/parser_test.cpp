@@ -21,8 +21,24 @@ int main()
     if (!empty.instructions.empty() || !empty.labels.empty() || !blank.instructions.empty() || !blank.labels.empty()
         || exits.instructions.size() != 2 || exits.instructions[0].opcode != simtlab::Opcode::EXIT
         || !exits.instructions[0].operands.empty() || exits.instructions[1].opcode != simtlab::Opcode::EXIT) return 1;
-    if (!rejects("NOPE", "1:1") || !rejects("EXIT r0", "1:6") || !rejects("@EXIT", "1:1")
+    if (!rejects("NOPE", "1:1") || !rejects("EXIT r0", "1:6") || !rejects("@EXIT", "1:2")
         || !rejects("\n  nope", "2:3")) return 1;
+    const auto predicated = simtlab::parse("@p0 ADD r0, r1, r2\n@!P3 setp.eq p2, r4, r5\nEXIT");
+    if (predicated.instructions.size() != 3
+        || !predicated.instructions[0].predicate
+        || predicated.instructions[0].predicate->index != simtlab::PredicateIndex::P0
+        || predicated.instructions[0].predicate->negated
+        || !predicated.instructions[1].predicate
+        || predicated.instructions[1].predicate->index != simtlab::PredicateIndex::P3
+        || !predicated.instructions[1].predicate->negated
+        || predicated.instructions[2].predicate) return 1;
+    const auto spacedPredicate = simtlab::parse("@ ! p3  add r0, r1, r2");
+    if (!spacedPredicate.instructions[0].predicate || !spacedPredicate.instructions[0].predicate->negated
+        || spacedPredicate.instructions[0].predicate->index != simtlab::PredicateIndex::P3) return 1;
+    if (!rejects("@", "1:2") || !rejects("@!", "1:3") || !rejects("@p", "1:2")
+        || !rejects("@p4 ADD r0, r1, r2", "1:2") || !rejects("@p32 ADD r0, r1, r2", "1:2")
+        || !rejects("@x ADD r0, r1, r2", "1:2") || !rejects("@p0", "1:1")
+        || !rejects("@p0 label:", "1:5") || !rejects("@p0 MMA.M16N16K16 r0, r8, r16", "1:5")) return 1;
     const auto labels = simtlab::parse("first:\nsecond:\nEXIT\nend:");
     if (labels.instructions.size() != 1 || labels.instructions[0].opcode != simtlab::Opcode::EXIT
         || labels.labels.size() != 3 || labels.labels.at("first") != 0

@@ -4,8 +4,10 @@
 
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace simtlab
@@ -102,10 +104,32 @@ Program parse(std::string_view source)
             ++position;
             continue;
         }
+        const Token& instructionStart = tokens[position];
+        std::optional<Predicate> instructionPredicate;
+        if (tokens[position].kind == TokenKind::AtSign)
+        {
+            const Token& atSign = tokens[position++];
+            bool negated = false;
+            if (tokens[position].kind == TokenKind::Bang)
+            {
+                negated = true;
+                ++position;
+            }
+            const Token& predicateToken = tokens[position];
+            const std::string_view name = predicateToken.lexeme;
+            if (predicateToken.kind != TokenKind::Identifier || name.size() != 2
+                || (name[0] != 'p' && name[0] != 'P') || name[1] < '0' || name[1] > '3')
+                fail(predicateToken, "expected predicate register p0-p3 after '@'");
+            instructionPredicate = Predicate{static_cast<PredicateIndex>(name[1] - '0'), negated};
+            ++position;
+            if (tokens[position].kind == TokenKind::EndOfLine || tokens[position].kind == TokenKind::EndOfFile)
+                fail(atSign, "expected instruction after predicate prefix");
+        }
         const Token& mnemonic = tokens[position++];
         if (mnemonic.kind != TokenKind::Identifier) fail(mnemonic, "malformed instruction");
         if (tokens[position].kind == TokenKind::Colon)
         {
+            if (instructionPredicate) fail(mnemonic, "predicate prefix cannot be applied to a label");
             if (program.labels.find(mnemonic.lexeme) != program.labels.end())
                 fail(mnemonic, "duplicate label");
             if (tokens[position + 1].kind != TokenKind::EndOfLine
@@ -118,6 +142,11 @@ Program parse(std::string_view source)
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
+        auto appendInstruction = [&](Instruction instruction)
+        {
+            instruction.source_location = SourceLocation{instructionStart.line, instructionStart.column};
+            program.instructions.push_back(std::move(instruction));
+        };
         const bool isBarrier = matchesMnemonic(mnemonic.lexeme, "BAR")
             && tokens[position].kind == TokenKind::Dot
             && position + 1 < tokens.size()
@@ -139,6 +168,7 @@ Program parse(std::string_view source)
             && position + 1 < tokens.size()
             && tokens[position + 1].kind == TokenKind::Identifier
             && matchesMnemonic(tokens[position + 1].lexeme, "M16N16K16");
+        if (instructionPredicate && isMma) fail(mnemonic, "MMA.M16N16K16 cannot be predicated");
         const bool isAnd = matchesMnemonic(mnemonic.lexeme, "AND");
         const bool isOr = matchesMnemonic(mnemonic.lexeme, "OR");
         const bool isShl = matchesMnemonic(mnemonic.lexeme, "SHL");
@@ -254,7 +284,7 @@ Program parse(std::string_view source)
                 if (value > 15) fail(sign ? *sign : literal, "BAR.SYNC ID must be 0 through 15");
             }
             if (negative && value != 0) fail(*sign, "BAR.SYNC ID must be 0 through 15");
-            program.instructions.push_back({Opcode::BAR_SYNC, {std::uint32_t{value}}, {}});
+            appendInstruction({Opcode::BAR_SYNC, {std::uint32_t{value}}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -271,8 +301,8 @@ Program parse(std::string_view source)
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after BRA");
-            program.instructions.push_back({Opcode::BRA,
-                {LabelOperand{target.lexeme}, LabelOperand{reconv.lexeme}}, {}});
+            appendInstruction({Opcode::BRA,
+                {LabelOperand{target.lexeme}, LabelOperand{reconv.lexeme}}, instructionPredicate, {}});
             labelReferences.push_back({target.lexeme, "BRA branch target", target.line, target.column, false});
             labelReferences.push_back({reconv.lexeme, "BRA reconvergence target", reconv.line, reconv.column, true});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
@@ -286,7 +316,7 @@ Program parse(std::string_view source)
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after JMP");
-            program.instructions.push_back({Opcode::JMP, {LabelOperand{target.lexeme}}, {}});
+            appendInstruction({Opcode::JMP, {LabelOperand{target.lexeme}}, instructionPredicate, {}});
             labelReferences.push_back({target.lexeme, "JMP target", target.line, target.column, false});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
@@ -342,7 +372,7 @@ Program parse(std::string_view source)
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after SREG");
-            program.instructions.push_back({Opcode::SREG, {destination, special}, {}});
+            appendInstruction({Opcode::SREG, {destination, special}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -387,7 +417,7 @@ Program parse(std::string_view source)
             if (spansOverlap(destination, source1)) fail(source1Token, "MMA register spans must be pairwise disjoint");
             if (spansOverlap(destination, source2) || spansOverlap(source1, source2))
                 fail(source2Token, "MMA register spans must be pairwise disjoint");
-            program.instructions.push_back({Opcode::MMA_M16N16K16, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::MMA_M16N16K16, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -422,7 +452,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after ADD");
             }
-            program.instructions.push_back({Opcode::ADD, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::ADD, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -457,7 +487,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SUB");
             }
-            program.instructions.push_back({Opcode::SUB, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::SUB, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -484,7 +514,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after MUL");
             }
-            program.instructions.push_back({Opcode::MUL, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::MUL, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -514,7 +544,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after FMA");
             }
-            program.instructions.push_back({Opcode::FMA, {destination, source1, source2, source3}, {}});
+            appendInstruction({Opcode::FMA, {destination, source1, source2, source3}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -581,7 +611,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after AND");
             }
-            program.instructions.push_back({Opcode::AND, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::AND, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -648,7 +678,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after OR");
             }
-            program.instructions.push_back({Opcode::OR, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::OR, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -715,7 +745,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SHL");
             }
-            program.instructions.push_back({Opcode::SHL, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::SHL, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -782,7 +812,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SHR");
             }
-            program.instructions.push_back({Opcode::SHR, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::SHR, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -809,7 +839,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after FADD");
             }
-            program.instructions.push_back({Opcode::FADD, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::FADD, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -836,7 +866,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after FMUL");
             }
-            program.instructions.push_back({Opcode::FMUL, {destination, source1, source2}, {}});
+            appendInstruction({Opcode::FMUL, {destination, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -925,8 +955,8 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after LDG");
             }
-            program.instructions.push_back({Opcode::LDG,
-                {destination, MemoryOperand{base, offset}, static_cast<MemoryWidth>(width)}, {}});
+            appendInstruction({Opcode::LDG,
+                {destination, MemoryOperand{base, offset}, static_cast<MemoryWidth>(width)}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1015,8 +1045,8 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after STG");
             }
-            program.instructions.push_back({Opcode::STG,
-                {MemoryOperand{base, offset}, source, static_cast<MemoryWidth>(width)}, {}});
+            appendInstruction({Opcode::STG,
+                {MemoryOperand{base, offset}, source, static_cast<MemoryWidth>(width)}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1097,8 +1127,8 @@ Program parse(std::string_view source)
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after LDS");
-            program.instructions.push_back({Opcode::LDS,
-                {destination, MemoryOperand{base, offset}, static_cast<MemoryWidth>(width)}, {}});
+            appendInstruction({Opcode::LDS,
+                {destination, MemoryOperand{base, offset}, static_cast<MemoryWidth>(width)}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1179,8 +1209,8 @@ Program parse(std::string_view source)
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after STS");
-            program.instructions.push_back({Opcode::STS,
-                {MemoryOperand{base, offset}, source, static_cast<MemoryWidth>(width)}, {}});
+            appendInstruction({Opcode::STS,
+                {MemoryOperand{base, offset}, source, static_cast<MemoryWidth>(width)}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1216,7 +1246,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.EQ");
             }
-            program.instructions.push_back({Opcode::SETP_EQ, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_EQ, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1252,7 +1282,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.NE");
             }
-            program.instructions.push_back({Opcode::SETP_NE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_NE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1288,7 +1318,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.LT");
             }
-            program.instructions.push_back({Opcode::SETP_LT, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_LT, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1324,7 +1354,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.LE");
             }
-            program.instructions.push_back({Opcode::SETP_LE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_LE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1360,7 +1390,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.GT");
             }
-            program.instructions.push_back({Opcode::SETP_GT, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_GT, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1396,7 +1426,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.GE");
             }
-            program.instructions.push_back({Opcode::SETP_GE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_GE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1432,7 +1462,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FEQ");
             }
-            program.instructions.push_back({Opcode::SETP_FEQ, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FEQ, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1468,7 +1498,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FNE");
             }
-            program.instructions.push_back({Opcode::SETP_FNE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FNE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1504,7 +1534,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FLT");
             }
-            program.instructions.push_back({Opcode::SETP_FLT, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FLT, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1540,7 +1570,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FLE");
             }
-            program.instructions.push_back({Opcode::SETP_FLE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FLE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1576,7 +1606,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FGT");
             }
-            program.instructions.push_back({Opcode::SETP_FGT, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FGT, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1612,7 +1642,7 @@ Program parse(std::string_view source)
             {
                 fail(tokens[position], "unexpected operand after SETP.FGE");
             }
-            program.instructions.push_back({Opcode::SETP_FGE, {predicate, source1, source2}, {}});
+            appendInstruction({Opcode::SETP_FGE, {predicate, source1, source2}, instructionPredicate, {}});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1621,7 +1651,7 @@ Program parse(std::string_view source)
         {
             fail(tokens[position], "unexpected operand after EXIT");
         }
-        program.instructions.push_back({Opcode::EXIT, {}, {}});
+        appendInstruction({Opcode::EXIT, {}, instructionPredicate, {}});
         if (tokens[position].kind == TokenKind::EndOfLine) ++position;
     }
     for (const auto& reference : labelReferences)
