@@ -67,6 +67,21 @@ int main()
     if (!rejects("JMP", "1:4") || !rejects("JMP target extra", "1:12")
         || !rejects("JMP 3", "1:5") || !rejects("JMP @target", "1:5")
         || !rejects("JMP target, other", "1:11")) return 1;
+    const auto multipleControlRefs = simtlab::parse("entry:\nBRA body, done\nbody:\nJMP done\ndone:\nEXIT");
+    if (multipleControlRefs.instructions.size() != 3 || multipleControlRefs.labels.size() != 3
+        || multipleControlRefs.labels.at("entry") != 0 || multipleControlRefs.labels.at("body") != 1
+        || multipleControlRefs.labels.at("done") != 2) return 1;
+    auto reports = [](const char* source, const char* message)
+    {
+        try { simtlab::parse(source); }
+        catch (const std::runtime_error& error) { return std::string(error.what()).find(message) != std::string::npos; }
+        return false;
+    };
+    if (!reports("BRA missing, reconv\nreconv:\nEXIT",
+                 "undefined BRA branch target label 'missing' at 1:5")
+        || !reports("target:\nBRA target, missing\nEXIT",
+                    "undefined BRA reconvergence target label 'missing' at 2:13")
+        || !reports("JMP missing", "undefined JMP target label 'missing' at 1:5")) return 1;
     const auto specialReads = simtlab::parse(
         "sreg r0, laneid\nSReG R31, wArPiD\nSREG r0, TID.X\nSREG r0, TID.Y\nSREG r0, TID.Z"
         "\nSREG r0, CTAID.X\nSREG r0, CTAID.Y\nSREG r0, CTAID.Z"

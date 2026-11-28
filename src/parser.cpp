@@ -41,6 +41,14 @@ Program parse(std::string_view source)
 {
     const auto tokens = lex(source);
     Program program;
+    struct LabelReference
+    {
+        std::string name;
+        const char* role;
+        std::size_t line;
+        std::size_t column;
+    };
+    std::vector<LabelReference> labelReferences;
     std::size_t position = 0;
     auto fail = [](const Token& token, const char* message)
     {
@@ -225,6 +233,8 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after BRA");
             program.instructions.push_back({Opcode::BRA,
                 {LabelOperand{target.lexeme}, LabelOperand{reconv.lexeme}}, {}});
+            labelReferences.push_back({target.lexeme, "BRA branch target", target.line, target.column});
+            labelReferences.push_back({reconv.lexeme, "BRA reconvergence target", reconv.line, reconv.column});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -237,6 +247,7 @@ Program parse(std::string_view source)
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after JMP");
             program.instructions.push_back({Opcode::JMP, {LabelOperand{target.lexeme}}, {}});
+            labelReferences.push_back({target.lexeme, "JMP target", target.line, target.column});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1556,6 +1567,15 @@ Program parse(std::string_view source)
         }
         program.instructions.push_back({Opcode::EXIT, {}, {}});
         if (tokens[position].kind == TokenKind::EndOfLine) ++position;
+    }
+    for (const auto& reference : labelReferences)
+    {
+        if (program.labels.find(reference.name) == program.labels.end())
+        {
+            throw std::runtime_error(std::string("undefined ") + reference.role + " label '"
+                                     + reference.name + "' at " + std::to_string(reference.line)
+                                     + ":" + std::to_string(reference.column));
+        }
     }
     return program;
 }
