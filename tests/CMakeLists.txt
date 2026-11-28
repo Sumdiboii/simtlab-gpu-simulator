@@ -78,3 +78,11 @@ target_compile_features(simtlab_predicate_execution_test PRIVATE cxx_std_20)
 target_include_directories(simtlab_predicate_execution_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
 set_target_properties(simtlab_predicate_execution_test PROPERTIES CXX_EXTENSIONS OFF)
 add_test(NAME simtlab_predicate_execution_test COMMAND simtlab_predicate_execution_test)
+
+add_executable(simtlab_end_to_end_test end_to_end_test.cpp
+    ${PROJECT_SOURCE_DIR}/src/execution_state.cpp ${PROJECT_SOURCE_DIR}/src/parser.cpp
+    ${PROJECT_SOURCE_DIR}/src/lexer.cpp)
+target_compile_features(simtlab_end_to_end_test PRIVATE cxx_std_20)
+target_include_directories(simtlab_end_to_end_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+set_target_properties(simtlab_end_to_end_test PROPERTIES CXX_EXTENSIONS OFF)
+add_test(NAME simtlab_end_to_end_test COMMAND simtlab_end_to_end_test)
