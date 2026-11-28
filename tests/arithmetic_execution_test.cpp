@@ -78,8 +78,10 @@ bool floatingInstruction(std::string_view source, Opcode opcode, int operation)
         const float a = std::bit_cast<float>(registers[1]);
         const float b = std::bit_cast<float>(registers[2]);
         const float c = std::bit_cast<float>(registers[3]);
-        const float separateProduct = static_cast<float>(a * b);
-        const float separateResult = static_cast<float>(separateProduct + c);
+        // Force an observable binary32 rounding between the multiply and add;
+        // otherwise an optimizing compiler may contract this reference into FMA.
+        volatile float separateProduct = static_cast<float>(a * b);
+        volatile float separateResult = static_cast<float>(separateProduct + c);
         const float result = operation == 0 ? static_cast<float>(a + b)
             : operation == 1 ? static_cast<float>(a * b) : std::fma(a, b, c);
         expected[i] = std::bit_cast<std::uint32_t>(result);
