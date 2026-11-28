@@ -63,6 +63,8 @@ public:
         terminated_ = pc_ == program_.instructions.size();
     }
 
+    void step();
+
 private:
     void resetMovedFrom() noexcept
     {

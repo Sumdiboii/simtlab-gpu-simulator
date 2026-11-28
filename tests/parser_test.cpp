@@ -171,8 +171,25 @@ int main()
     if (!rejects("ADD", "1:4") || !rejects("ADD r0, r1,", "1:12")
         || !rejects("ADD r0, r1, r2, r3", "1:15") || !rejects("ADD r0 r1, r2", "1:8")
         || !rejects("ADD ,r0,r1", "1:5") || !rejects("ADD r0,,r1", "1:8")
-        || !rejects("ADD rx, r1, r2", "1:5") || !rejects("ADD r32, r1, r2", "1:5")
-        || !rejects("ADD r0, r1, 2", "1:13")) return 1;
+        || !rejects("ADD rx, r1, r2", "1:5") || !rejects("ADD r32, r1, r2", "1:5")) return 1;
+    const auto addImmediates = simtlab::parse(
+        "ADD r2, r3, 7\nADD r2, r3, -1\nADD r2, r3, 0x10\nADD r2, r3, -0x2\n"
+        "ADD r2, r3, 4294967295\nADD r2, r3, +0\nADD r2, r3, 0xFFFFFFFF\n"
+        "ADD r2, r3, -4294967295");
+    const std::uint32_t addImmediateValues[] = {7, 0xffffffffu, 16, 0xfffffffeu,
+                                                0xffffffffu, 0, 0xffffffffu, 1};
+    if (addImmediates.instructions.size() != 8) return 1;
+    for (std::size_t i = 0; i < addImmediates.instructions.size(); ++i)
+    {
+        const auto& instruction = addImmediates.instructions[i];
+        if (instruction.opcode != simtlab::Opcode::ADD || instruction.operands.size() != 3
+            || !std::holds_alternative<std::uint32_t>(instruction.operands[2])
+            || std::get<std::uint32_t>(instruction.operands[2]) != addImmediateValues[i]) return 1;
+    }
+    if (!rejects("ADD r0, r1, 4294967296", "1:")
+        || !rejects("ADD r0, r1, -4294967296", "1:")
+        || !rejects("ADD r0, r1, 0x100000000", "1:")
+        || !rejects("ADD r0, r1, 1.5", "1:")) return 1;
     const auto subs = simtlab::parse("SUB r0, r31, R0\nsUb R31, r0, r31");
     if (subs.instructions.size() != 2) return 1;
     for (const auto& instruction : subs.instructions)
@@ -190,8 +207,23 @@ int main()
     if (!rejects("SUB", "1:4") || !rejects("SUB r0, r1,", "1:12")
         || !rejects("SUB r0, r1, r2, r3", "1:15") || !rejects("SUB r0 r1, r2", "1:8")
         || !rejects("SUB ,r0,r1", "1:5") || !rejects("SUB r0,,r1", "1:8")
-        || !rejects("SUB rx, r1, r2", "1:5") || !rejects("SUB r32, r1, r2", "1:5")
-        || !rejects("SUB r0, r1, 2", "1:13")) return 1;
+        || !rejects("SUB rx, r1, r2", "1:5") || !rejects("SUB r32, r1, r2", "1:5")) return 1;
+    const auto subImmediates = simtlab::parse(
+        "SUB r2, r3, 7\nSUB r2, r3, -1\nSUB r2, r3, 0x10\nSUB r2, r3, -0x2\n"
+        "SUB r2, r3, 4294967295");
+    const std::uint32_t subImmediateValues[] = {7, 0xffffffffu, 16, 0xfffffffeu, 0xffffffffu};
+    if (subImmediates.instructions.size() != 5) return 1;
+    for (std::size_t i = 0; i < subImmediates.instructions.size(); ++i)
+    {
+        const auto& instruction = subImmediates.instructions[i];
+        if (instruction.opcode != simtlab::Opcode::SUB || instruction.operands.size() != 3
+            || !std::holds_alternative<std::uint32_t>(instruction.operands[2])
+            || std::get<std::uint32_t>(instruction.operands[2]) != subImmediateValues[i]) return 1;
+    }
+    if (!rejects("SUB r0, r1, 4294967296", "1:")
+        || !rejects("SUB r0, r1, -4294967296", "1:")
+        || !rejects("SUB r0, r1, 0x100000000", "1:")
+        || !rejects("SUB r0, r1, 1.5", "1:")) return 1;
     const auto muls = simtlab::parse("MUL r0, r31, R0\nmUl R31, r0, r31");
     if (muls.instructions.size() != 2) return 1;
     for (const auto& instruction : muls.instructions)

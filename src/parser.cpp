@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace simtlab
 {
@@ -35,6 +36,44 @@ bool parseGpr(std::string_view name, GprIndex& index)
     }
     index = static_cast<GprIndex>(value);
     return true;
+}
+
+template <typename Fail>
+std::uint32_t parseIntegerImmediate(const std::vector<Token>& tokens, std::size_t& position, Fail&& fail)
+{
+    bool negative = false;
+    const Token* sign = nullptr;
+    if (tokens[position].kind == TokenKind::Plus || tokens[position].kind == TokenKind::Minus)
+    {
+        sign = &tokens[position++];
+        negative = sign->kind == TokenKind::Minus;
+    }
+    const Token& literal = tokens[position];
+    if (literal.kind != TokenKind::IntegerLiteral) fail(literal, "expected integer immediate");
+    ++position;
+
+    std::string_view digits = literal.lexeme;
+    unsigned int base = 10;
+    if (digits.size() > 2 && digits[0] == '0' && digits[1] == 'x')
+    {
+        digits.remove_prefix(2);
+        base = 16;
+    }
+    std::uint32_t value = 0;
+    for (const char character : digits)
+    {
+        unsigned int digit = 0;
+        if (character >= '0' && character <= '9') digit = static_cast<unsigned int>(character - '0');
+        else if (base == 16 && character >= 'a' && character <= 'f')
+            digit = static_cast<unsigned int>(character - 'a' + 10);
+        else if (base == 16 && character >= 'A' && character <= 'F')
+            digit = static_cast<unsigned int>(character - 'A' + 10);
+        else fail(literal, "invalid digit in integer immediate");
+        if (value > (std::numeric_limits<std::uint32_t>::max() - digit) / base)
+            fail(sign ? *sign : literal, "integer immediate out of range");
+        value = value * base + digit;
+    }
+    return negative ? std::uint32_t{0} - value : value;
 }
 }
 Program parse(std::string_view source)
@@ -369,7 +408,15 @@ Program parse(std::string_view source)
             const GprIndex source1 = registerOperand();
             if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in ADD");
             ++position;
-            const GprIndex source2 = registerOperand();
+            Operand source2;
+            if (tokens[position].kind == TokenKind::Identifier)
+            {
+                source2 = registerOperand();
+            }
+            else
+            {
+                source2 = parseIntegerImmediate(tokens, position, fail);
+            }
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
             {
@@ -396,7 +443,15 @@ Program parse(std::string_view source)
             const GprIndex source1 = registerOperand();
             if (tokens[position].kind != TokenKind::Comma) fail(tokens[position], "expected comma in SUB");
             ++position;
-            const GprIndex source2 = registerOperand();
+            Operand source2;
+            if (tokens[position].kind == TokenKind::Identifier)
+            {
+                source2 = registerOperand();
+            }
+            else
+            {
+                source2 = parseIntegerImmediate(tokens, position, fail);
+            }
             if (tokens[position].kind != TokenKind::EndOfLine
                 && tokens[position].kind != TokenKind::EndOfFile)
             {

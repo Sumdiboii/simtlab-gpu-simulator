@@ -10,6 +10,7 @@ add_executable(simtlab
     src/main.cpp
     src/lexer.cpp
     src/parser.cpp
+    src/execution_state.cpp
 )
 target_include_directories(simtlab PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
