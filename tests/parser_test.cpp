@@ -38,8 +38,8 @@ int main()
         duplicate_reported = std::string(error.what()).find("duplicate label at 3:1") != std::string::npos;
     }
     if (!duplicate_reported) return 1;
-    const auto branches = simtlab::parse("bRa forward_target, reconv\nforward_target:\nEXIT\nreconv:");
-    if (branches.instructions.size() != 2 || branches.instructions[0].opcode != simtlab::Opcode::BRA
+    const auto branches = simtlab::parse("bRa forward_target, reconv\nforward_target:\nEXIT\nreconv:\nEXIT");
+    if (branches.instructions.size() != 3 || branches.instructions[0].opcode != simtlab::Opcode::BRA
         || branches.instructions[0].operands.size() != 2
         || !std::holds_alternative<simtlab::LabelOperand>(branches.instructions[0].operands[0])
         || !std::holds_alternative<simtlab::LabelOperand>(branches.instructions[0].operands[1])
@@ -81,7 +81,11 @@ int main()
                  "undefined BRA branch target label 'missing' at 1:5")
         || !reports("target:\nBRA target, missing\nEXIT",
                     "undefined BRA reconvergence target label 'missing' at 2:13")
-        || !reports("JMP missing", "undefined JMP target label 'missing' at 1:5")) return 1;
+        || !reports("JMP missing", "undefined JMP target label 'missing' at 1:5")
+        || !reports("BRA body, end\nbody:\nEXIT\nend:",
+                    "BRA reconvergence target label 'end' must identify an instruction at 1:11")) return 1;
+    const auto eofTarget = simtlab::parse("JMP end\nend:");
+    if (eofTarget.instructions.size() != 1 || eofTarget.labels.at("end") != 1) return 1;
     const auto specialReads = simtlab::parse(
         "sreg r0, laneid\nSReG R31, wArPiD\nSREG r0, TID.X\nSREG r0, TID.Y\nSREG r0, TID.Z"
         "\nSREG r0, CTAID.X\nSREG r0, CTAID.Y\nSREG r0, CTAID.Z"

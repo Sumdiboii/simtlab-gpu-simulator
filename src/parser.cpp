@@ -47,6 +47,7 @@ Program parse(std::string_view source)
         const char* role;
         std::size_t line;
         std::size_t column;
+        bool requiresInstruction;
     };
     std::vector<LabelReference> labelReferences;
     std::size_t position = 0;
@@ -233,8 +234,8 @@ Program parse(std::string_view source)
                 fail(tokens[position], "unexpected operand after BRA");
             program.instructions.push_back({Opcode::BRA,
                 {LabelOperand{target.lexeme}, LabelOperand{reconv.lexeme}}, {}});
-            labelReferences.push_back({target.lexeme, "BRA branch target", target.line, target.column});
-            labelReferences.push_back({reconv.lexeme, "BRA reconvergence target", reconv.line, reconv.column});
+            labelReferences.push_back({target.lexeme, "BRA branch target", target.line, target.column, false});
+            labelReferences.push_back({reconv.lexeme, "BRA reconvergence target", reconv.line, reconv.column, true});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -247,7 +248,7 @@ Program parse(std::string_view source)
                 && tokens[position].kind != TokenKind::EndOfFile)
                 fail(tokens[position], "unexpected operand after JMP");
             program.instructions.push_back({Opcode::JMP, {LabelOperand{target.lexeme}}, {}});
-            labelReferences.push_back({target.lexeme, "JMP target", target.line, target.column});
+            labelReferences.push_back({target.lexeme, "JMP target", target.line, target.column, false});
             if (tokens[position].kind == TokenKind::EndOfLine) ++position;
             continue;
         }
@@ -1570,10 +1571,17 @@ Program parse(std::string_view source)
     }
     for (const auto& reference : labelReferences)
     {
-        if (program.labels.find(reference.name) == program.labels.end())
+        const auto label = program.labels.find(reference.name);
+        if (label == program.labels.end())
         {
             throw std::runtime_error(std::string("undefined ") + reference.role + " label '"
                                      + reference.name + "' at " + std::to_string(reference.line)
+                                     + ":" + std::to_string(reference.column));
+        }
+        if (reference.requiresInstruction && label->second >= program.instructions.size())
+        {
+            throw std::runtime_error(std::string(reference.role) + " label '" + reference.name
+                                     + "' must identify an instruction at " + std::to_string(reference.line)
                                      + ":" + std::to_string(reference.column));
         }
     }
